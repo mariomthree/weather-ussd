@@ -1,0 +1,14 @@
+services:
+  weather-ussd:
+    build: .
+    image: weather-ussd:1.0
+    container_name: weather-ussd
+    restart: unless-stopped
+    # Chave da WeatherAPI e restantes variaveis (o .env nao entra na imagem nem no git)
+    env_file: .env
+    ports:
+      - "8080:8080"
+    # Base de dados e logs ficam na pasta do projecto (weather-ussd/data e weather-ussd/logs)
+    volumes:
+      - ./data:/weather-ussd/data
+      - ./logs:/weather-ussd/logs

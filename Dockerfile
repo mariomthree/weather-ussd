@@ -9,7 +9,7 @@ ENV TZ=Africa/Maputo \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-WORKDIR /app
+WORKDIR /weather-ussd
 COPY app ./app
 COPY simulate.py README.md ./
 
@@ -21,7 +21,7 @@ USER app
 
 # A chave da WeatherAPI e as restantes variaveis chegam por --env-file (nao ficam na imagem)
 EXPOSE 8080
-VOLUME ["/app/data", "/app/logs"]
+VOLUME ["/weather-ussd/data", "/weather-ussd/logs"]
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"

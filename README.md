@@ -15,15 +15,17 @@ Shortcode de testes: `*562*09#` (Tmcel e Vodacom).
 
 ## Docker
 ```bash
-docker build -t weather-ussd:1.0 .
-docker run -d --name weather-ussd --restart unless-stopped --env-file .env -p 8080:8080 \
-  -v "$PWD/data:/app/data" -v "$PWD/logs:/app/logs" weather-ussd:1.0
-
-docker logs -f weather-ussd                   # ver logs em tempo real
-docker rm -f weather-ussd                     # parar e remover (antes de voltar a correr apos um build)
+docker compose up -d --build      # construir a imagem e arrancar (tambem apos alterar o codigo)
+docker compose logs -f            # ver logs em tempo real
+docker compose ps                 # estado (deve indicar "healthy")
+docker compose down               # parar e remover o contentor
 ```
-A base de dados (`data/weather-ussd.db`) e os logs (`logs/ussd.log`) ficam na pasta do projecto.
-A chave da WeatherAPI chega pelo `--env-file` e nao fica dentro da imagem.
+Volumes (`docker-compose.yml`):
+```
+./data  ->  /weather-ussd/data   base de dados (data/weather-ussd.db)
+./logs  ->  /weather-ussd/logs   logs (logs/ussd.log)
+```
+A chave da WeatherAPI chega pelo `.env` (`env_file`) e nao fica dentro da imagem.
 
 ## Logs
 `logs/ussd.log`, um ficheiro por dia (guardados `LOG_RETENTION_DAYS`, 90 por defeito). Regista:
