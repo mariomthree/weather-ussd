@@ -1,12 +1,18 @@
 services:
   weather-ussd:
     build: .
-    image: weather-ussd:1.0
+    image: weather-ussd:${TAG:-latest}
     container_name: weather-ussd
     restart: unless-stopped
     env_file: .env
     ports:
-      - "8080:8080"
+      - "127.0.0.1:9001:8080"
     volumes:
       - ./data:/weather-ussd/data
       - ./logs:/weather-ussd/logs
+    networks:
+      - weather_ussd_network
+
+networks:
+  weather_ussd_network:
+    name: weather_ussd_network

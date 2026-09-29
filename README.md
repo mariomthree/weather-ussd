@@ -19,6 +19,7 @@ docker compose up -d --build      # construir a imagem e arrancar (tambem apos a
 docker compose logs -f            # ver logs em tempo real
 docker compose ps                 # estado (deve indicar "healthy")
 docker compose down               # parar e remover o contentor
+python3 simulate.py http://localhost:9001/ussd   # a porta do contentor so fica no loopback (9001)
 ```
 Volumes (`docker-compose.yml`):
 ```
@@ -26,6 +27,10 @@ Volumes (`docker-compose.yml`):
 ./logs  ->  /weather-ussd/logs   logs (logs/ussd.log)
 ```
 A chave da WeatherAPI chega pelo `.env` (`env_file`) e nao fica dentro da imagem.
+
+## Deploy
+Deploy no servidor (imagem por `.tar`, Docker Compose, Nginx com SSL, firewall):
+[docs/DEPLOY-QUICKSTART.md](docs/DEPLOY-QUICKSTART.md) (resumo) e [docs/DEPLOY.md](docs/DEPLOY.md) (completo).
 
 ## Logs
 `logs/ussd.log`, um ficheiro por dia (guardados `LOG_RETENTION_DAYS`, 90 por defeito). Regista:
