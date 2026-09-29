@@ -2,6 +2,9 @@
 
 - dia passado  -> history.json
 - hoje/futuro  -> forecast.json (o plano actual devolve no maximo 3 dias)
+
+As condicoes vem na lingua pedida (pt; sem "lang" a API responde em ingles).
+A cache e por provincia, dia e lingua; cada resposta guarda todos os dias que devolve.
 """
 import json
 import logging
@@ -34,8 +37,10 @@ class WeatherUnavailable(Exception):
     """A API nao tem dados para a data pedida (limite do plano ou fora de alcance)."""
 
 
-def _call(endpoint: str, params: dict) -> dict:
-    query = urllib.parse.urlencode({"key": config.API_WEATHER_KEY, "lang": "pt", **params})
+def _call(endpoint: str, params: dict, lang: str) -> dict:
+    if lang != "en":
+        params = {**params, "lang": lang}
+    query = urllib.parse.urlencode({"key": config.API_WEATHER_KEY, **params})
     url = f"{config.API_WEATHER_URL}{endpoint}?{query}"
     t0 = time.monotonic()
     status = None
@@ -66,37 +71,67 @@ def _call(endpoint: str, params: dict) -> dict:
     return body
 
 
-def get_day_weather(q: str, day: date, today: date) -> dict:
-    key = f"{q}|{day.isoformat()}"
+def _cached(q: str, day: date, lang: str) -> dict | None:
     with _cache_lock:
-        hit = _cache.get(key)
+        hit = _cache.get(f"{q}|{day.isoformat()}|{lang}")
     if hit and time.monotonic() - hit[0] < CACHE_TTL_S:
-        log.info("[cache] %s %s -> %s", q, day.isoformat(), hit[1])
         return hit[1]
+    return None
+
+
+def _remember(q: str, lang: str, body: dict, today: date) -> dict[str, dict]:
+    """Extrai e guarda na cache todos os dias da resposta: {"AAAA-MM-DD": dados}."""
+    days = {}
+    for fd in body.get("forecast", {}).get("forecastday", []):
+        d = fd["day"]
+        days[fd["date"]] = {
+            "max": d["maxtemp_c"],
+            "min": d["mintemp_c"],
+            "avg": d["avgtemp_c"],
+            "condition": d.get("condition", {}).get("text", ""),
+            "current": body.get("current", {}).get("temp_c") if fd["date"] == today.isoformat() else None,
+        }
+    now = time.monotonic()
+    with _cache_lock:
+        for iso, data in days.items():
+            _cache[f"{q}|{iso}|{lang}"] = (now, data)
+    return days
+
+
+def get_day_weather(q: str, day: date, today: date, lang: str) -> dict:
+    hit = _cached(q, day, lang)
+    if hit is not None:
+        log.info("[cache] %s %s %s -> %s", q, day.isoformat(), lang, hit)
+        return hit
 
     diff_days = (day - today).days
     if diff_days >= MAX_FORECAST_DAYS:
         raise WeatherUnavailable("fora do alcance da previsao")
 
     if diff_days < 0:
-        body = _call("history.json", {"q": q, "dt": day.isoformat()})
+        body = _call("history.json", {"q": q, "dt": day.isoformat()}, lang)
     else:
-        body = _call("forecast.json", {"q": q, "days": diff_days + 1, "aqi": "no", "alerts": "no"})
+        body = _call("forecast.json", {"q": q, "days": diff_days + 1, "aqi": "no", "alerts": "no"}, lang)
 
-    forecast_days = body.get("forecast", {}).get("forecastday", [])
-    fd = next((f for f in forecast_days if f.get("date") == day.isoformat()), None)
-    if fd is None:
+    data = _remember(q, lang, body, today).get(day.isoformat())
+    if data is None:
         raise WeatherUnavailable("data nao devolvida pela API")
-
-    d = fd["day"]
-    data = {
-        "max": d["maxtemp_c"],
-        "min": d["mintemp_c"],
-        "avg": d["avgtemp_c"],
-        "condition": d.get("condition", {}).get("text", ""),
-        "current": body.get("current", {}).get("temp_c") if diff_days == 0 else None,
-    }
-    log.info("[data] %s %s -> %s", q, day.isoformat(), data)
-    with _cache_lock:
-        _cache[key] = (time.monotonic(), data)
+    log.info("[data] %s %s %s -> %s", q, day.isoformat(), lang, data)
     return data
+
+
+def get_forecast(q: str, today: date, days: int, lang: str) -> list[tuple[date, dict]]:
+    """Previsao de hoje e dos dias seguintes, numa so chamada. So devolve os dias que a API enviou."""
+    wanted = [today + timedelta(days=i) for i in range(days)]
+    hits = [_cached(q, d, lang) for d in wanted]
+    if all(h is not None for h in hits):
+        log.info("[cache] %s previsao %d dias %s", q, days, lang)
+        return list(zip(wanted, hits))
+
+    body = _call("forecast.json", {"q": q, "days": days, "aqi": "no", "alerts": "no"}, lang)
+    got = _remember(q, lang, body, today)
+    result = [(d, got[d.isoformat()]) for d in wanted if d.isoformat() in got]
+    if not result:
+        raise WeatherUnavailable("previsao nao devolvida pela API")
+    log.info("[data] %s previsao %s -> %s", q, lang, result)
+    return result

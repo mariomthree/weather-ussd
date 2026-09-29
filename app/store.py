@@ -4,6 +4,7 @@
             assinante poder retomar onde parou (cancelamento, timeout, queda de rede).
             E apagado quando a interaccao termina normalmente.
 - sessions: registo de cada session_id, chave de reconciliacao com a InoveIT (spec 3.2).
+- preferences: lingua escolhida por MSISDN (pt/en). Permanente, ao contrario de states.
 """
 import json
 import os
@@ -35,8 +36,15 @@ _db.executescript(
         ended_at    TEXT,
         end_reason  TEXT
     );
+    CREATE TABLE IF NOT EXISTS preferences (
+        msisdn      TEXT PRIMARY KEY,
+        lang        TEXT NOT NULL,
+        updated_at  REAL NOT NULL
+    );
     """
 )
+
+DEFAULT_LANG = "pt"
 
 
 @dataclass
@@ -45,6 +53,7 @@ class State:
     session_id: str
     stack: list[str] = field(default_factory=list)
     data: dict = field(default_factory=dict)
+    lang: str = DEFAULT_LANG
 
 
 def _now_iso() -> str:
@@ -57,9 +66,11 @@ def load_state(msisdn: str, session_id: str) -> State:
         row = _db.execute(
             "SELECT stack, data, updated_at FROM states WHERE msisdn = ?", (msisdn,)
         ).fetchone()
+        pref = _db.execute("SELECT lang FROM preferences WHERE msisdn = ?", (msisdn,)).fetchone()
+    lang = pref[0] if pref else DEFAULT_LANG
     if row and time.time() - row[2] < config.RESUME_TTL_MIN * 60:
-        return State(msisdn, session_id, json.loads(row[0]), json.loads(row[1]))
-    return State(msisdn, session_id)
+        return State(msisdn, session_id, json.loads(row[0]), json.loads(row[1]), lang)
+    return State(msisdn, session_id, lang=lang)
 
 
 def save_state(st: State) -> None:
@@ -69,6 +80,15 @@ def save_state(st: State) -> None:
             "ON CONFLICT(msisdn) DO UPDATE SET session_id = excluded.session_id, stack = excluded.stack, "
             "data = excluded.data, updated_at = excluded.updated_at",
             (st.msisdn, st.session_id, json.dumps(st.stack), json.dumps(st.data), time.time()),
+        )
+
+
+def set_lang(msisdn: str, lang: str) -> None:
+    with _lock:
+        _db.execute(
+            "INSERT INTO preferences (msisdn, lang, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(msisdn) DO UPDATE SET lang = excluded.lang, updated_at = excluded.updated_at",
+            (msisdn, lang, time.time()),
         )
 
 

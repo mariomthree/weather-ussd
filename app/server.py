@@ -113,16 +113,19 @@ class UssdHandler(BaseHTTPRequestHandler):
             store.session_started(sid, msisdn, p.get("shortcode"))
         st = store.load_state(msisdn, sid)
         before = list(st.stack)
+        lang_before = st.lang
 
         out = handle(st, msg, is_new)
+        if st.lang != lang_before:
+            store.set_lang(msisdn, st.lang)
         if out["end_session"]:
             store.clear_state(msisdn)
             store.session_ended(sid, "COMPLETED")
         else:
             store.save_state(st)
         log.info(
-            "[ussd] session=%s msisdn=%s new=%s msg=%r ecra=%s->%s end=%s len=%d",
-            sid, msisdn, is_new, msg, before[-1:] or "-", "FIM" if out["end_session"] else st.stack[-1:],
+            "[ussd] session=%s msisdn=%s new=%s lang=%s msg=%r ecra=%s->%s end=%s len=%d",
+            sid, msisdn, is_new, st.lang, msg, before[-1:] or "-", "FIM" if out["end_session"] else st.stack[-1:],
             out["end_session"], len(out["message"]),
         )
         self._send(200, out)

@@ -1,7 +1,7 @@
 # weather-ussd
 
 App USSD de teste da integracao com o **InoveIT USSD Gateway API v2.1** (tarefa USSD_01).
-Mostra a temperatura por provincia de Mocambique usando a WeatherAPI.
+Mostra o estado do tempo por provincia de Mocambique usando a WeatherAPI, em portugues ou ingles.
 Python >= 3.10, apenas biblioteca padrao (sem dependencias a instalar).
 
 ## Correr
@@ -42,11 +42,28 @@ Deploy no servidor (imagem por `.tar`, Docker Compose, Nginx com SSL, firewall):
 
 ## Menus
 ```
-Temperatura Mocambique
-1.Temperatura de hoje     -> lista de provincias -> resultado
-2.Temperatura de um dia   -> data DDMMYYYY -> lista de provincias -> resultado
-0.Sair
+Estado do Tempo
+1. Tempo hoje         -> lista de provincias -> Max, Min, Condicoes de hoje
+2. Previsao 3 dias    -> lista de provincias -> Max e Min de hoje e dos 2 dias seguintes
+3. Outra data         -> data DDMMYYYY -> lista de provincias -> Max, Min, Condicoes
+4. Idioma/Language    -> 1. Portugues / 2. English
+0. Sair
 ```
+A previsao de 3 dias usa uma so chamada `forecast.json?days=3` e mostra um dia por linha,
+sem condicoes, para caber nos 160 caracteres:
+```
+Maputo Provincia
+Previsao 3 dias
+
+Hoje   29/09 Max 19C Min 17C
+Quarta 30/09 Max 23C Min 17C
+Quinta 01/10 Max 24C Min 15C
+```
+
+**Idioma:** a escolha fica guardada por MSISDN (tabela `preferences`) e vale para as sessoes
+seguintes; por defeito e portugues. Muda tudo: menus, meses, dias da semana, nomes das
+provincias (Maputo City/Province) e as condicoes da WeatherAPI (`lang=pt` ou sem `lang` em ingles).
+A opcao `4. Idioma/Language` aparece sempre nas duas linguas.
 Em todos os submenus: `0` = voltar ao menu anterior, `00` = menu principal.
 O ecra do resultado e final: e enviado com `end_session: true` e termina a sessao.
 
@@ -68,7 +85,7 @@ Ao sair (`0.Sair`) ou ao chegar ao resultado, o estado e apagado.
 app/server.py     endpoint HTTP (spec 4.1/4.2/5.2)
 app/menu.py       maquina de estados dos menus
 app/weather.py    cliente WeatherAPI (history/forecast, cache, timeout)
-app/store.py      SQLite: estado por MSISDN (retoma) e registo de session_id
+app/store.py      SQLite: estado por MSISDN (retoma), lingua por MSISDN e registo de session_id
 app/provinces.py  provincias e coordenadas das capitais
 app/config.py     leitura do .env
 app/logs.py       logs em consola e ficheiro diario
@@ -82,7 +99,7 @@ simulate.py       simulador do Gateway
 - Estado guardado em SQLite (`data/weather-ussd.db`), por isso sobrevive a reinicios do servidor.
 - Cada `session_id` fica registado na tabela `sessions` (inicio, fim, motivo) para reconciliacao (spec 3.2).
 - Mensagens convertidas para ASCII e limitadas a 160 caracteres.
-- Timeout de 8s na WeatherAPI e cache de 10 min (deadline do GW ~15s).
+- Timeout de 8s na WeatherAPI e cache de 10 min por provincia, dia e lingua (deadline do GW ~15s).
 - Plano gratuito da WeatherAPI: historico de 7 dias e previsao ate 2 dias a frente. O ecra da data
   mostra o intervalo ("Disponivel: 21/09 a 30/09") e recusa datas fora dele. Ao mudar de plano,
   ajustar `WEATHER_HISTORY_DAYS` e `WEATHER_FORECAST_DAYS` no `.env`.
